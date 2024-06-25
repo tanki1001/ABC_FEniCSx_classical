@@ -15,7 +15,7 @@ from operators_POO import (Mesh,
                         Simulation, 
                         import_frequency_sweep, import_COMSOL_result, store_results, plot_analytical_result_sigma,
                         least_square_err, compute_analytical_radiation_factor)
-print("test")
+print("test2")
 # Choice of the geometry among provided ones
 geometry1 = 'cubic'
 geometry2 = 'small'
