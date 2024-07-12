@@ -5,7 +5,6 @@ from scipy.sparse import csr_matrix
 from scipy.io import savemat
 from sympy import symbols, diff, lambdify
 import sympy as sy
-#import pyvista
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
@@ -110,10 +109,10 @@ class Mesh:
         P1 = element(family, mesh.basix_cell(), deg)
         P = functionspace(mesh, P1)
 
-
-        if deg != 1:
-            # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
-            deg = deg - 1
+        if True:
+            if deg != 1:
+                # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
+                deg = deg - 1
         Q1 = element(family, submesh.basix_cell(), deg)
         Q = functionspace(submesh, Q1)
         
@@ -522,7 +521,6 @@ class Simulation:
         ax.legend(loc='upper left')
         ax.set_xlabel('Frequency (Hz)')
         ax.set_ylabel(r'$\sigma$')
-        plt.savefig("test.png")
     
         
        
@@ -849,8 +847,9 @@ class B3p(Operator):
         dddp = inner(grad(ddp), n) # d^3p/dn^3 = grad(d^2p/dn^2) * n = grad(grad(dp/dn) * n) * n = grad(grad(grad(p) * n) * n) * n
         
         g1   = inner(dddp, u)*ds(3)
-        g2   = inner(ddp, u)*ds(3)
-        g3   = inner(fx1*ddp, u)*ds(3)
+
+        g2   = inner(fx1*ddp, u)*ds(3)
+        g3   = inner(ddp, u)*ds(3)
         
         g4   = inner(fx1**3*p, u)*ds(3)
         g5   = inner(fx1**2*p, u)*ds(3)
@@ -861,8 +860,8 @@ class B3p(Operator):
         e2   = inner(fx1*q, u)*dx1
         e3   = inner(q, u)*dx1
     
-        list_Z       = np.array([k,      m,  c, g1,    g2, g3, g4,     g5,       g6,        g7, e1,     e2,       e3])
-        list_coeff_Z = np.array([1, -k0**2, -1,  1, 3j*k0,  9,  6, 18j*k0, -9*k0**2, -1j*k0**3, 18, 18j*k0, -3*k0**2])
+        list_Z       = np.array([k,      m,  c, g1, g2,    g3, g4,     g5,       g6,        g7, e1,     e2,       e3])
+        list_coeff_Z = np.array([1, -k0**2, -1,  1,  9, 3j*k0,  6, 18j*k0, -9*k0**2, -1j*k0**3, 18, 18j*k0, -3*k0**2])
         
         return list_Z, list_coeff_Z
 
@@ -887,13 +886,13 @@ class B3p(Operator):
         c_0  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
-        c_7  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
-        c_8  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
-        c_9  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
+        c_3  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        c_9  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
         c_10 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[10](freq)))
         c_11 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[11](freq)))
         c_12 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[12](freq)))

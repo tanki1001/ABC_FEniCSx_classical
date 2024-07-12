@@ -60,6 +60,7 @@ if comsol_data:
 from_data_b1p = True
 from_data_b2p = True
 
+
 #  Creation of a simulation with B1p
 ## Choice of a mesh, a loading, an operator -> Simulation
 mesh_   = Mesh(1, side_box, radius, lc, geo_fct)
@@ -95,22 +96,24 @@ else :
     s  = s1 + '_' + geometry
     store_results(s, freqvec2, PavFOM2)
 
-# Creation a simulation with new operator B2p
+# Creation a simulation with new operator B3p
+run_B3p = True
+if run_B3p:
+    mesh_.set_deg(4)
+    ope3    = B3p(mesh_)
+    loading = Loading(mesh_)
 
-mesh_.set_deg(3)
-ope3    = B3p(mesh_)
-loading = Loading(mesh_)
-
-simu3   = Simulation(mesh_, ope3, loading)
-freqvec3 = np.arange(80, 2001, 20)
-PavFOM3 = simu3.FOM(freqvec3)
+    simu3   = Simulation(mesh_, ope3, loading)
+    freqvec3 = np.arange(80, 2001, 20)
+    PavFOM3 = simu3.FOM(freqvec3)
 
 # Plot of the results with matplotlib - so far impossible except with jupyterlab
 fig, ax = plt.subplots(figsize=(16,9))
 simu1.plot_radiation_factor(ax, freqvec1, PavFOM1, s = 'FOM_b1p')
 simu2.plot_radiation_factor(ax, freqvec2, PavFOM2,  s = 'FOM_b2p')
 #print(f'PavFOM2 : {PavFOM2}')
-simu3.plot_radiation_factor(ax, freqvec3, PavFOM3,  s = 'FOM_b3p')
+if run_B3p:
+    simu3.plot_radiation_factor(ax, freqvec3, PavFOM3,  s = 'FOM_b3p')
 if comsol_data:
     ax.plot(frequency, results, c = 'black', label=r'$\sigma_{COMSOL}$')
     ax.legend()
@@ -118,6 +121,8 @@ if comsol_data:
 plot_analytical_result = True
 if plot_analytical_result:
     plot_analytical_result_sigma(ax, freqvec, radius)
+ax.set_ylim(0,2)
+plt.savefig("test.png")
 
 Z_ana = compute_analytical_radiation_factor(freqvec, radius)
 err_B1p = least_square_err(freqvec, Z_ana.real, freqvec1, simu1.compute_radiation_factor(freqvec1, PavFOM1).real)
@@ -125,6 +130,6 @@ print(f'For lc = {lc} - L2_err(B1p) = {err_B1p}')
 
 err_B2p = least_square_err(freqvec, Z_ana.real, freqvec2, simu2.compute_radiation_factor(freqvec2, PavFOM2).real)
 print(f'For lc = {lc} - L2_err(B2p) = {err_B2p}')
-
-err_B3p = least_square_err(freqvec, Z_ana.real, freqvec3, simu3.compute_radiation_factor(freqvec3, PavFOM3).real)
-print(f'For lc = {lc} - L2_err(B3p) = {err_B3p}')
+if run_B3p:
+    err_B3p = least_square_err(freqvec, Z_ana.real, freqvec3, simu3.compute_radiation_factor(freqvec3, PavFOM3).real)
+    print(f'For lc = {lc} - L2_err(B3p) = {err_B3p}')
