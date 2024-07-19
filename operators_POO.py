@@ -109,7 +109,7 @@ class Mesh:
         P1 = element(family, mesh.basix_cell(), deg)
         P = functionspace(mesh, P1)
 
-        if True:
+        if False:
             if deg != 1:
                 # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
                 deg = deg - 1
@@ -486,7 +486,7 @@ class Simulation:
             # Qsol1 can provide information in the q unknown which is the normal derivative of the pressure field along the boundary. Qsol1 is not used in this contribution.
         
         
-            Pav1[ii] = petsc.assemble.assemble_scalar(form(Psol1*ds(1)))
+            Pav1[ii] = assemble_scalar(form(Psol1*ds(1)))
             ksp.destroy()
             X.destroy()
             Z.destroy()
@@ -511,7 +511,9 @@ class Simulation:
         if s == 'FOM_b1p':
             ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b1p}$', c = 'green')
         elif s == 'FOM_b2p':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b2p}$', c = 'red')
+            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b2p}$', c = 'm')
+        elif s == 'FOM_b3p':
+            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b3p}$', c = 'grey')
         elif s == 'WCAWE':
             ax.plot(freqvec, Z_center.real, label = r'$\sigma_{WCAWE}$', c = 'red')
             
@@ -1225,6 +1227,25 @@ def check_ortho(Vn):
     
 def store_results(s, freqvec, Pav):
     with open('FOM_data/'+s+'.txt', 'w') as fichier:    
+        for i in range(len(freqvec)):        
+            fichier.write('{}\t{}\n'.format(freqvec[i], Pav[i]))
+
+def store_resultsv2(list_s, freqvec, Pav):
+    dict_s = {
+        "geo"  : list_s[0],
+        "case" : list_s[1],
+        "ope"  : list_s[2],
+        "lc"   : list_s[3],
+        "dimP" : list_s[4],
+        "dimQ" : list_s[5]
+    }
+    s = "classical_"
+    for key, value in dict_s.items():
+        s+= value
+        if key != "dimQ":
+            s+= "_"
+    s+=".txt"
+    with open("classical/"+s, 'w') as fichier:    
         for i in range(len(freqvec)):        
             fichier.write('{}\t{}\n'.format(freqvec[i], Pav[i]))
 
