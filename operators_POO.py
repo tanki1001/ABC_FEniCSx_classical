@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from scipy import special
 import scipy.linalg as la
@@ -502,12 +503,15 @@ class Simulation:
         return Z_center
 
     
-    def plot_radiation_factor(self, ax, freqvec, Pav, s = ''):
+    def plot_radiation_factor(self, ax, freqvec, Pav, s = '', compute = True):
         #_, ds, _ = self.mesh.integral_mesure()
         #surfarea = petsc.assemble.assemble_scalar(form(1*ds(1)))
         #k_output = 2*np.pi*freqvec/c0
         #Z_center = 1j*k_output* Pav / surfarea
-        Z_center = self.compute_radiation_factor(freqvec, Pav)
+        if compute :
+            Z_center = self.compute_radiation_factor(freqvec, Pav)
+        else:
+            Z_center = Pav
         if s == 'FOM_b1p':
             ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b1p}$', c = 'green')
         elif s == 'FOM_b2p':
@@ -1017,8 +1021,6 @@ class Loading:
         d_jF = [[lambdify(fr, d_jFexpr_j, 'numpy') for d_jFexpr_j in d_jFexpr[i]] for i in range(len(d_jFexpr))]
         return d_jF
 
-
-
 def sub_matrix(Q, start, end):
     '''
     This function is to obtain the sub matrix need for the correction term (P_q_w)
@@ -1209,7 +1211,6 @@ def SVD_ortho2(Vn):
 
     return V_petsc
 
-
 def check_ortho(Vn):
     '''
     This function plot the scalar product between 2 following vector inside a basis, to check if they are orthogonal one to each other.
@@ -1224,13 +1225,77 @@ def check_ortho(Vn):
         vec2 = Vn.getColumnVector(i+1)
         result = vec1.dot(vec2)
         print("vec"+str(i)+" . vec"+str(i+1)+" = "+str(result))
+
+def get_wcawe_param():
+    with open("wcawe_param.txt", 'r') as file:
+        lines = file.readlines()
     
+    sections = ["Dir", "Geometry", "Case", "Operator", "Lc", "DimP", "DimQ"]
+    sections_val = []
+    # Variable pour indiquer si la ligne précédente contient "section"
+    nb_sec = 0
+    previous_line_is_section = False
+
+    # Liste pour stocker les nouvelles lignes
+    updated_lines = []
+    
+    for line in lines:
+        if previous_line_is_section:
+            sections_val.append(line)
+            previous_line_is_section = False
+        else:
+            updated_lines.append(line)
+            if any(section in line for section in sections):
+                previous_line_is_section = True
+                nb_sec +=1
+    
+    dir  = sections_val[0].removesuffix("\n")
+    geo  = sections_val[1].removesuffix("\n")
+    case = sections_val[2].removesuffix("\n")
+    ope  = sections_val[3].removesuffix("\n")
+    lc   = float(sections_val[4])
+    dimP = int(sections_val[5])
+    dimQ = int(sections_val[6])
+    return dir, geo, case, ope, lc, dimP, dimQ
+    
+def parse_wcawe_param():
+    frequencies = []
+    n_values = []
+
+    with open("wcawe_param.txt", 'r') as file:
+        lines = file.readlines()
+
+        freq_section = False
+        n_section = False
+
+        for line in lines:
+
+            if line.startswith('%') or '\n' == line:
+                continue
+
+            if "List frequencies" in line:
+                freq_section = True
+                n_section = False
+                continue
+            elif "List N" in line:
+                freq_section = False
+                n_section = True
+                continue
+
+            if freq_section:
+                frequencies.append(int(line.strip()))
+            elif n_section:
+                n_values.append(int(line.strip()))
+
+    return frequencies, n_values
+
 def store_results(s, freqvec, Pav):
-    with open('FOM_data/'+s+'.txt', 'w') as fichier:    
+    with open('/root/WCAWE_POO_github/FOM_data/'+s+'.txt', 'w') as fichier:    
         for i in range(len(freqvec)):        
             fichier.write('{}\t{}\n'.format(freqvec[i], Pav[i]))
 
-def store_resultsv2(list_s, freqvec, Pav):
+def store_resultsv2(list_s, freqvec, Pav, simu):
+    z_center = simu.compute_radiation_factor(freqvec, Pav)
     dict_s = {
         "geo"  : list_s[0],
         "case" : list_s[1],
@@ -1245,12 +1310,68 @@ def store_resultsv2(list_s, freqvec, Pav):
         if key != "dimQ":
             s+= "_"
     s+=".txt"
-    with open("classical/"+s, 'w') as fichier:    
+    print(s)
+    with open("/root/WCAWE_POO_github/classical/"+s, 'w') as fichier:    
         for i in range(len(freqvec)):        
-            fichier.write('{}\t{}\n'.format(freqvec[i], Pav[i]))
+            fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
+
+def store_results_wcawe(list_s, freqvec, Pav, simu):
+    z_center = simu.compute_radiation_factor(freqvec, Pav)
+    dict_s = {
+        "geo"  : list_s[0],
+        "case" : list_s[1],
+        "ope"  : list_s[2],
+        "lc"   : list_s[3],
+        "dimP" : list_s[4],
+        "dimQ" : list_s[5]
+    }
+    s_dir = ""
+    for key, value in dict_s.items():
+        s_dir+= value
+        if key != "dimQ":
+            s_dir+= "_"
+    print(s_dir)
+    directory_path = "/root/WCAWE_POO_github/wcawe/classical/" + s_dir
+    # Create the directory if it doesn't exist
+    os.makedirs(directory_path, exist_ok=True)
+
+    list_freq, list_N = parse_wcawe_param()
+    s = ""
+    for freq in list_freq:
+        s+=str(freq)
+        s+="Hz_"
+    for i in range(len(list_N)):
+        s+=str(list_N[i])
+        if i !=len(list_N)-1:
+            s+="_"
+        else:
+            s+=".txt"
+    print(s)
+    file_path = os.path.join(directory_path, s)
+    with open(file_path, 'w') as fichier:    
+        for i in range(len(freqvec)):        
+            fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
 
 def import_frequency_sweep(s):
-    with open('FOM_data/'+s+".txt", "r") as f:
+    with open('/root/WCAWE_POO_github/FOM_data/'+s+".txt", "r") as f:
+        freqvec = list()
+        Pav     = list()
+        for line in f:
+            if "%" in line:
+                continue
+            data    = line.split()
+            freqvec.append(data[0])
+            Pav.append(data[1])
+            freqvec = [float(element) for element in freqvec]
+            Pav     = [complex(element) for element in Pav]
+    
+    freqvec = np.array(freqvec)
+    Pav     = np.array(Pav)
+    
+    return freqvec, Pav
+
+def import_frequency_sweepv2(s):
+    with open('/root/WCAWE_POO_github/classical/'+s+".txt", "r") as f:
         freqvec = list()
         Pav     = list()
         for line in f:
@@ -1292,7 +1413,6 @@ def import_COMSOL_result(s):
             frequency = [float(element) for element in frequency]
             results = [float(element) for element in results]
     return frequency, results
-
 
 def least_square_err(freqvec1, Z_center1, freqvec2, Z_center2):
     
