@@ -17,13 +17,13 @@ from operators_POO import (Mesh,
                         least_square_err, compute_analytical_radiation_factor)
 print("test2")
 # Choice of the geometry among provided ones
-geometry1 = 'spherical'
-geometry2 = 'large'
+geometry1 = 'cubic'
+geometry2 = 'small'
 geometry  = geometry1 + '_'+ geometry2
 
 if   geometry2 == 'small':
     side_box = 0.11
-    lc       = 4e-3
+    lc       = 8e-3
 elif geometry2 == 'large':
     side_box = 0.40
     lc       = 2e-2
@@ -57,14 +57,22 @@ if comsol_data:
     frequency, results = import_COMSOL_result(s)
 
 # Choice between using saved results or doing a new frequency sweep
-from_data_b1p = False
+from_data_b1p = True
 from_data_b2p = True
 from_data_b3p = True
+
+b1p_plot_row_columns = False
+b2p_plot_row_columns = False
+b3p_plot_row_columns = False
+
+b1p_plot_svd = True
+b2p_plot_svd = True
+b3p_plot_svd = True
 
 
 #  Creation of a simulation with B1p
 ## Choice of a mesh, a loading, an operator -> Simulation
-dimP = 4
+dimP = 1
 if False :
     dimQ = dimP - 1
 else :
@@ -84,12 +92,21 @@ else :
     s1 = 'FOM_b1p'
     s = s1 + '_' + geometry
     store_results(s, freqvec1, PavFOM1)
-    if True :
+    
+    if False :
         list_s = [geometry1, geometry2, "b1p", str(lc), str(dimP), str(dimQ)]
         store_resultsv2(list_s, freqvec1, PavFOM1, simu1)
 
+if b1p_plot_row_columns:
+    #simu1.plot_row_columns_norm(freq = 80, s = 'b1p')
+    simu1.plot_matrix_heatmap(freq = 1000, s = 'b1p')
+
+if b1p_plot_svd:
+    #simu1.plot_cond(freqvec1, s ='b1p_'+str(dimP)+'_'+str(dimQ))
+    simu1.plot_sv_listZ(s ='b1p_')
+
 # Creation a simulation with new operator B2p
-dimP = 3
+dimP = 4
 if False :
     dimQ = dimP - 1
 else :
@@ -110,12 +127,20 @@ else :
     s1 = 'FOM_b2p'
     s  = s1 + '_' + geometry
     store_results(s, freqvec2, PavFOM2)
-    if True :
+    if False :
         list_s = [geometry1, geometry2, "b2p", str(lc), str(dimP), str(dimQ)]
         store_resultsv2(list_s, freqvec2, PavFOM2, simu2)
 
+if b2p_plot_row_columns:
+    #simu2.plot_row_columns_norm(freq = 80, s = 'b2p')
+    simu2.plot_matrix_heatmap(freq = 1000, s = 'b2p')
+
+if b2p_plot_svd:
+    #simu2.plot_cond(freqvec2, s ='b2p_'+str(dimP)+'_'+str(dimQ))
+    simu2.plot_sv_listZ(s ='b2p_')
+
 # Creation a simulation with new operator B3p
-dimP = 3
+dimP = 4
 if False :
     dimQ = dimP - 1
 else :
@@ -132,13 +157,23 @@ if from_data_b3p:
     freqvec3, PavFOM3 = import_frequency_sweep(s)
 else :
     freqvec3 = freqvec
-    PavFOM3 = simu3.FOM(freqvec2)
+    PavFOM3 = simu3.FOM(freqvec3)
     s1 = 'FOM_b3p'
     s  = s1 + '_' + geometry
     store_results(s, freqvec3, PavFOM3)
-    if True :
+    if False :
         list_s = [geometry1, geometry2, "b3p", str(lc), str(dimP), str(dimQ)]
         store_resultsv2(list_s, freqvec3, PavFOM3, simu3)
+
+
+if b3p_plot_row_columns:
+    #simu3.plot_row_columns_norm(freq = 80, s = 'b3p')
+    simu3.plot_matrix_heatmap(freq = 1000, s = 'b3p')
+
+if b3p_plot_svd:
+    #simu3.plot_cond(freqvec3, s ='b3p_'+str(dimP)+'_'+str(dimQ))
+    simu3.plot_sv_listZ(s ='b3p_')
+
 
 # Plot of the results with matplotlib - so far impossible except with jupyterlab
 fig, ax = plt.subplots(figsize=(16,9))

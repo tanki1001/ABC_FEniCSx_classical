@@ -194,6 +194,7 @@ class Simulation:
         offset       = P.dofmap.index_map.size_local * P.dofmap.index_map_bs # This is a bit obscur so far
         
         _, ds, _ = mesh.integral_mesure()
+        
         for ii in tqdm(range(freqvec.size)):
             freq = freqvec[ii]
             
@@ -201,6 +202,7 @@ class Simulation:
             F = loading.dFj(freq, list_coeff_F_j[0])
             if ii == 0:
                 print(f"Size of the global matrix: {Z.getSize()}")
+    
                 
             # Solve
             ksp = PETSc.KSP().create()
@@ -220,8 +222,167 @@ class Simulation:
             X.destroy()
             Z.destroy()
             F.destroy()
+        
             
         return Pav1
+    
+    def plot_row_columns_norm(self, freq, s = ''):
+        ope     = self.operator
+
+        list_coeff_Z_j = ope.deriv_coeff_Z(0)
+
+        Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+        list_row_norms    = row_norms(Z)
+        list_column_norms = column_norms(Z)
+
+        fig, (ax_row, ax_col) = plt.subplots(nrows=2, ncols=1)
+        ax_row.bar(range(len(list_row_norms)), list_row_norms)
+        ax_row.set_ylim([min(list_row_norms), max(list_row_norms)])
+        ax_col.bar(range(len(list_column_norms)), list_column_norms)
+        ax_col.set_ylim([min(list_column_norms), max(list_column_norms)])
+
+        ax_row.set_title('rows')
+        ax_col.set_title('colums')
+        
+        plt.savefig(s + f'_row_columns_norm_{freq}.png')
+  
+    def plot_matrix_heatmap(self, freq, s = ''):
+        
+        ope     = self.operator
+
+        list_coeff_Z_j = ope.deriv_coeff_Z(0)
+
+        Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+        # Obtain the dimensions of the matrix
+        m, n = Z.getSize()
+
+        # Initialise a numpy matrix to store the coefficients
+        matrix_values = np.zeros((m, n), dtype = 'complex')
+
+        # Lists to store indices and non-zero values (real and imaginary parts)
+        rows = []
+        cols = []
+        real_values = []
+        imag_values = []
+
+        # aBrowse each row of the matrix
+        for i in range(m):
+            
+            row_cols, row_values = Z.getRow(i)
+            rows.extend([i] * len(row_cols))  # Repeat the row index for each non-zero value
+            cols.extend(row_cols)
+            # Extract the real and imaginary parts of the coefficients
+            real_values.extend([val.real for val in row_values])
+            imag_values.extend([val.imag for val in row_values])
+
+        # Create a figure with two sub-graphs
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+
+        # Draw the mapping of the real part
+        scatter1 = ax1.scatter(cols, rows, c=real_values, cmap='viridis', marker='s', s=10)
+        ax1.set_title('Real part Mapping')
+        ax1.set_xlabel('Column index')
+        ax1.set_ylabel('Row index')
+        ax1.invert_yaxis()
+        plt.colorbar(scatter1, ax=ax1, label='Real Part')
+
+        # Draw the mapping of the imaginary part
+        scatter2 = ax2.scatter(cols, rows, c=imag_values, cmap='plasma', marker='s', s=10)
+        ax2.set_title('Real part Mapping')
+        ax2.set_xlabel('Column index')
+        ax2.set_ylabel('Row index')
+        ax2.invert_yaxis()
+        plt.colorbar(scatter2, ax=ax2, label='Real Part')
+
+        # Plot graphs side by side
+        plt.tight_layout()
+        plt.savefig(s + f'_colored_matrix_{freq}.png')
+        print(s + f'_colored_matrix_{freq}.png has been downloaded')
+
+    def plot_cond(self, freqvec, s =''):
+        ope = self.operator
+        
+        list_condition_number = []
+        
+        fig, (ax_cn, ax_sv) = plt.subplots(nrows = 1, ncols = 2)
+
+        for freq in freqvec:
+            list_coeff_Z_j = ope.deriv_coeff_Z(0)
+            Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+            condition_number, list_sigma = get_cond_nb(Z)
+            print(f'list_sigma = {list_sigma}')
+
+            list_condition_number.append(condition_number)
+            ax_sv.scatter([freq for _ in range(len(list_sigma))], list_sigma)
+        
+        
+        ax_cn.plot(freqvec, list_condition_number, label = 'conditioning number')
+        ax_cn.set_xlabel('Frequency')
+        ax_cn.set_ylabel('Conditionning number')
+
+        ax_sv.set_xlabel('Frequency')
+        ax_sv.set_ylabel('sigma')
+
+        ax_cn.legend()
+
+
+        # Plot graphs side by side
+        plt.tight_layout()
+        plt.savefig(s + f'_svd.png')
+        print(s + f'_svd.png has been downloaded')
+
+    def plot_sv_listZ(self, s =''):
+        ope              = self.operator
+        entity_maps_mesh = ope.mesh.entity_maps_mesh
+
+        listZ = ope.get_listZ()
+        
+        fig, ax = plt.subplots(layout='constrained',figsize = (16, 9))
+
+        width = 0.25
+
+        index_mat = 1
+
+        for z in listZ:
+            z_form = form(z, entity_maps=entity_maps_mesh)
+
+            Z = petsc.assemble_matrix(z_form)
+            Z.assemble()
+
+            cond_nb, cond_nb_list = get_cond_nb(Z)
+
+            print(f'Conditioning number of the {index_mat}th matrix: {cond_nb}')
+                        
+            for i in range(len(cond_nb_list)):
+                if i == 0:
+                    rects = ax.bar(index_mat - width/2*(len(cond_nb_list) -1 - i*2), cond_nb_list[i], width, label = str(cond_nb))
+                else:
+                    rects = ax.bar(index_mat - width/2*(len(cond_nb_list) -1 - i*2), cond_nb_list[i], width)
+                ax.bar_label(rects, padding=3)
+                
+
+            index_mat += 1
+        ax.set_xticks([i+1 for i in range(len(listZ))])  
+        ax.legend() 
+        plt.savefig(s+'_plot_sv_listZ.png')
+
+    def plot_listZ_heatmap(self, s = ''):
+        if False:
+            ope              = self.operator
+            entity_maps_mesh = ope.mesh.entity_maps_mesh
+
+            listZ = ope.get_listZ()
+            ncols = 3
+            if len(listZ)%3 == 0 :
+                nrows = len(listZ)//3
+            else :
+                nrows = len(listZ)//3 + 1
+
+            fig, axs = plt.subplots(nrows = nrows, ncols = ncols, figsize = (16, 9))
+        pass
 
     def singular_frequency_FOM(self, freq):
         '''
@@ -433,8 +594,6 @@ class Simulation:
             count += list_N[i]
         Vn.assemble()
         return Vn
-        
-            
 
     def moment_matching_MOR(self, Vn, freqvec):
         '''
@@ -502,7 +661,6 @@ class Simulation:
         Z_center = 1j*k_output* Pav / surfarea
         return Z_center
 
-    
     def plot_radiation_factor(self, ax, freqvec, Pav, s = '', compute = True):
         #_, ds, _ = self.mesh.integral_mesure()
         #surfarea = petsc.assemble.assemble_scalar(form(1*ds(1)))
@@ -528,7 +686,7 @@ class Simulation:
         ax.set_xlabel('Frequency (Hz)')
         ax.set_ylabel(r'$\sigma$')
     
-        
+
        
 
 class Operator(ABC):
@@ -579,6 +737,10 @@ class Operator(ABC):
 
     @abstractmethod
     def import_matrix(self, freq):
+        pass
+
+    @abstractmethod
+    def get_listZ(self):
         pass
 
 
@@ -636,6 +798,9 @@ class B1p(Operator):
     
         return list_Z, list_coeff_Z
 
+    def get_listZ(self):
+        list_Z = self.b1p()[0]
+        return list_Z
 
     def dZj(self, freq, list_coeff_Z_j):
         '''
@@ -748,6 +913,9 @@ class B2p(Operator):
     
         return list_Z, list_coeff_Z
 
+    def get_listZ(self):
+        list_Z = self.b2p()[0]
+        return list_Z
 
     def dZj(self, freq, list_coeff_Z_j):
         '''
@@ -871,6 +1039,9 @@ class B3p(Operator):
         
         return list_Z, list_coeff_Z
 
+    def get_listZ(self):
+        list_Z = self.b3p()[0]
+        return list_Z
 
     def dZj(self, freq, list_coeff_Z_j):
         '''
@@ -1158,28 +1329,70 @@ def SVD_ortho(Vn):
     return L
 
 def get_cond_nb(Z):
-    n   = Z.getSize()[0]
-    m   = Z.getSize()[1]
-    print(f'n : {n}')
-    
+    # Creating the SVD solver
     svd = SLEPc.SVD().create()
     svd.setOperator(Z)
-    #svd.setFromOptions()
-    svd.setDimensions(m)
-    svd.solve()
-    
-    nsv = svd.getConverged()
-    print(f'svd : {nsv}')
-    Sigma = []
-    for i in range(nsv):
-        
-        u = PETSc.Vec().createSeq(n)
-        v = PETSc.Vec().createSeq(m)
+    svd.setFromOptions()
 
-        sigma = svd.getSingularTriplet(i, u, v)
-        Sigma.append(sigma)
-    return max(Sigma)
+    # Solving the singular value decomposition
+    svd.solve()
+
+    # Recovery of extreme singular values
+    list_sigma = []
+    sigma_max = svd.getValue(0)
+    sigma_min = None
+
+    for i in range(svd.getConverged()):
+        sigma = svd.getValue(i)
+        list_sigma.append(sigma)
+        #print(f'sigma :{sigma}')
+        if sigma > 0 and (sigma_min is None or sigma < sigma_min):
+            sigma_min = sigma
+
+    if sigma_min is None or sigma_min == 0:
+        raise RuntimeError("The smallest singular value is zero, the number of conditions is infinite.")
+
+    condition_number = sigma_max / sigma_min
+    #print(f'Conditioning number :{condition_number}')
+    return condition_number, list_sigma
     
+def row_norms(A):
+    
+    # Obtain the dimensions of the matrix
+    m, n = A.getSize()
+
+    # Initialise an array to store row norms
+    list_row_norms = []
+
+    # Calculate the norm of each line
+    for i in range(m):
+        row = A.getRow(i)[1]  # Retrieves non-zero values from the line
+        row_norm = np.linalg.norm(row)
+        list_row_norms.append(row_norm)
+    return list_row_norms
+
+def column_norms(A):
+
+    # Obtain the dimensions of the matrix
+    m, n = A.getSize()
+
+    # Initialise an array to store columns norms
+    list_column_norms = []
+
+    # Calculate the norm of each columns
+    for j in range(n):
+        column_values = np.zeros(m, dtype = 'complex')  # Initialise a complete array the size of the column
+
+        # Browse each row to retrieve the values in column j
+        for i in range(m):
+            column_values[i] = A.getValue(i, j)
+
+        # Calculate the norm of the column
+        column_norm = np.linalg.norm(column_values)
+        list_column_norms.append(column_norm)
+    
+    return list_column_norms
+
 def SVD_ortho2(Vn):
     '''
     This function might be delete further. This function performs an orthogonalization of a basis with a singular value decomposition based on python computation. It converts the PETScMatType to a numpy array, does the computation, and gives back the orthogonalized matrix in the PETScMatType type.
