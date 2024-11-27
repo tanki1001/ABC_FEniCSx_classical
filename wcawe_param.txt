@@ -7,24 +7,23 @@ Geometry :
 cubic
 
 Case :
-large
+small
 
 Operator :
-b3p
+b2p
 
 Lc :
-0.02
+0.008
 
 DimP :
-3
+4
 
 DimQ :
-3
+4
 
 List frequencies :
-500
-1500
+1000
+
 
 List N :
-5
 5

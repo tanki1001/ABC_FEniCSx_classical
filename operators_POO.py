@@ -8,6 +8,8 @@ from sympy import symbols, diff, lambdify
 import sympy as sy
 import matplotlib.pyplot as plt
 
+import pyvista
+
 from tqdm import tqdm
 from time import time
 
@@ -21,13 +23,10 @@ import dolfinx.mesh as msh
 from mpi4py import MPI
 from dolfinx.fem import Function, functionspace, assemble, form, petsc, Constant, assemble_scalar
 from ufl import (TestFunction, TrialFunction, TrialFunctions,
-                 dx, grad, inner, Measure, variable, FacetNormal)
+                 dx, grad, inner, Measure, variable, FacetNormal, CellNormal)
 import petsc4py
 from petsc4py import PETSc
 import slepc4py.SLEPc as SLEPc
-
-
-
 
 rho0   = 1.21
 c0     = 343.8
@@ -36,10 +35,11 @@ source = 1
 fr = symbols('fr')
 k0 = 2*np.pi*fr/c0
 
+
 class Mesh:
     
 
-    def __init__(self, deg, side_box, radius, lc, geometry, model_name = "no_name"):
+    def __init__(self, degP, degQ, side_box, radius, lc, geometry, model_name = "no_name"):
         '''
         Constructor of the class Mesh. A Mesh is created from a function implemented in the module geometries. This class is not perfect, it only implements geometries of this case.
         input : 
@@ -53,7 +53,8 @@ class Mesh:
             Mesh
 
         '''
-        self.deg = deg
+        self.degP = degP
+        self.degQ = degQ
         
         mesh_info, submesh_info = geometry(side_box, radius, lc, model_name)
 
@@ -66,8 +67,8 @@ class Mesh:
         self.entity_maps_mesh = submesh_info[1]
 
 
-    def set_deg(self, deg):
-        self.deg = deg
+    #def set_deg(self, deg):
+    #    self.deg = deg
     
     def integral_mesure(self):
         '''
@@ -102,19 +103,16 @@ class Mesh:
             P = FunctionSpace : fonction space where the fonctions living in the acoutic domain will be declared
             Q = FonctionSpace : fonction space where the fonctions living in the subdomain will be declared
         '''
-        deg     = self.deg
+        degP    = self.degP
+        degQ    = self.degQ 
         mesh    = self.mesh
         submesh = self.submesh
     
         #P = FunctionSpace(mesh, (family, deg))
-        P1 = element(family, mesh.basix_cell(), deg)
+        P1 = element(family, mesh.basix_cell(), degP)
         P = functionspace(mesh, P1)
 
-        if False:
-            if deg != 1:
-                # This is linked to the fact on the subdomain, we will deal with the derivate of the function declared in the acoustic domain
-                deg = deg - 1
-        Q1 = element(family, submesh.basix_cell(), deg)
+        Q1 = element(family, submesh.basix_cell(), degQ)
         Q = functionspace(submesh, Q1)
         
     
@@ -183,7 +181,7 @@ class Simulation:
         '''
         ope     = self.operator
         loading = self.loading
-        Pav1    = np.zeros(freqvec.size, dtype=np.complex_)
+        Pav1    = np.zeros(freqvec.size, dtype=np.complex128)
         mesh    = self.mesh
 
         list_coeff_Z_j = ope.deriv_coeff_Z(0)
@@ -223,7 +221,7 @@ class Simulation:
             Z.destroy()
             F.destroy()
         
-            
+
         return Pav1
     
     def plot_row_columns_norm(self, freq, s = ''):
@@ -236,7 +234,7 @@ class Simulation:
         list_row_norms    = row_norms(Z)
         list_column_norms = column_norms(Z)
 
-        fig, (ax_row, ax_col) = plt.subplots(nrows=2, ncols=1)
+        fig, (ax_row, ax_col) = plt.subplots(nrows=2, ncols=1, figsize = (16, 9))
         ax_row.bar(range(len(list_row_norms)), list_row_norms)
         ax_row.set_ylim([min(list_row_norms), max(list_row_norms)])
         ax_col.bar(range(len(list_column_norms)), list_column_norms)
@@ -245,7 +243,8 @@ class Simulation:
         ax_row.set_title('rows')
         ax_col.set_title('colums')
         
-        plt.savefig(s + f'_row_columns_norm_{freq}.png')
+        plt.savefig('curves/ABC_curves/rows_col_norm/' +s + f'_row_columns_norm_{freq}.png')
+        print(s + f'_row_columns_norm_{freq}.png has been downloaded')
   
     def plot_matrix_heatmap(self, freq, s = ''):
         
@@ -259,7 +258,7 @@ class Simulation:
         m, n = Z.getSize()
 
         # Initialise a numpy matrix to store the coefficients
-        matrix_values = np.zeros((m, n), dtype = 'complex')
+        #matrix_values = np.zeros((m, n), dtype = 'complex')
 
         # Lists to store indices and non-zero values (real and imaginary parts)
         rows = []
@@ -267,7 +266,7 @@ class Simulation:
         real_values = []
         imag_values = []
 
-        # aBrowse each row of the matrix
+        # Browse each row of the matrix
         for i in range(m):
             
             row_cols, row_values = Z.getRow(i)
@@ -290,15 +289,15 @@ class Simulation:
 
         # Draw the mapping of the imaginary part
         scatter2 = ax2.scatter(cols, rows, c=imag_values, cmap='plasma', marker='s', s=10)
-        ax2.set_title('Real part Mapping')
+        ax2.set_title('Imaginary part Mapping')
         ax2.set_xlabel('Column index')
         ax2.set_ylabel('Row index')
         ax2.invert_yaxis()
-        plt.colorbar(scatter2, ax=ax2, label='Real Part')
+        plt.colorbar(scatter2, ax=ax2, label='Imaginary Part')
 
         # Plot graphs side by side
         plt.tight_layout()
-        plt.savefig(s + f'_colored_matrix_{freq}.png')
+        plt.savefig('curves/ABC_curves/heatmap/' +s + f'_colored_matrix_{freq}.png')
         print(s + f'_colored_matrix_{freq}.png has been downloaded')
 
     def plot_cond(self, freqvec, s =''):
@@ -306,7 +305,7 @@ class Simulation:
         
         list_condition_number = []
         
-        fig, (ax_cn, ax_sv) = plt.subplots(nrows = 1, ncols = 2)
+        fig, (ax_cn, ax_sv) = plt.subplots(nrows = 1, ncols = 2, figsize = (16, 9))
 
         for freq in freqvec:
             list_coeff_Z_j = ope.deriv_coeff_Z(0)
@@ -331,8 +330,26 @@ class Simulation:
 
         # Plot graphs side by side
         plt.tight_layout()
-        plt.savefig(s + f'_svd.png')
+        plt.savefig('curves/ABC_curves/cond_curves/' + s + f'_svd.png')
         print(s + f'_svd.png has been downloaded')
+    
+    def plot_condV2(self, freq):
+        ope = self.operator
+
+        list_eig_scipy = []
+        list_eig_slepc4py = []
+        
+        
+        list_coeff_Z_j = ope.deriv_coeff_Z(0)
+        Z = ope.dZj(freq, list_coeff_Z_j[0])
+
+        eig_scipy,  eig_slepc4py = get_cond_nbV2(Z)
+        #print(f'condition_number = {condition_number}')
+        fig, ax = plt.subplots()
+        ax.scatter(eig_scipy, eig_scipy, label = 'eig_scipy')
+        ax.scatter(eig_slepc4py, eig_slepc4py, label = 'eig_slepc4py')
+        ax.legend()
+        plt.savefig('testeig.png')
 
     def plot_sv_listZ(self, s =''):
         ope              = self.operator
@@ -342,7 +359,7 @@ class Simulation:
         
         fig, ax = plt.subplots(layout='constrained',figsize = (16, 9))
 
-        width = 0.25
+        width = 0.05
 
         index_mat = 1
 
@@ -367,22 +384,8 @@ class Simulation:
             index_mat += 1
         ax.set_xticks([i+1 for i in range(len(listZ))])  
         ax.legend() 
-        plt.savefig(s+'_plot_sv_listZ.png')
-
-    def plot_listZ_heatmap(self, s = ''):
-        if False:
-            ope              = self.operator
-            entity_maps_mesh = ope.mesh.entity_maps_mesh
-
-            listZ = ope.get_listZ()
-            ncols = 3
-            if len(listZ)%3 == 0 :
-                nrows = len(listZ)//3
-            else :
-                nrows = len(listZ)//3 + 1
-
-            fig, axs = plt.subplots(nrows = nrows, ncols = ncols, figsize = (16, 9))
-        pass
+        plt.savefig('curves/ABC_curves/sv_listZ/'+s+'_plot_sv_listZ.png')
+        print(s+'_plot_sv_listZ.png has been downloaded')
 
     def singular_frequency_FOM(self, freq):
         '''
@@ -428,6 +431,10 @@ class Simulation:
         X.destroy()
         Z.destroy()
         F.destroy()
+
+        #harry_plotter(P, Psol1, 'p', show_edges = True)  
+        #harry_plotter(Q, Qsol1, 'q', show_edges = True)
+        harry_plotterv2([P, Q], [Psol1, Qsol1], ['p', 'q'], show_edges = True)
             
         return Psol1, Qsol1
     
@@ -465,7 +472,7 @@ class Simulation:
         ksp.setOperators(Z_0)
         ksp.setType("gmres")
         ksp.getPC().setType("lu")
-        ksp.getPC().setFactorSolverType("superlu")
+        ksp.getPC().setFactorSolverType("mumps")
         
         ### Create Q matrix
         Q = PETSc.Mat().create()
@@ -479,6 +486,7 @@ class Simulation:
         ksp.solve(F_0, v1)
         
         norm_v1 = v1.norm()
+        print(f' norm 1st vector : {norm_v1}')
         v1.normalize()
         Q.setValue(0, 0, norm_v1)
         size_v1 = v1.getSize()
@@ -506,22 +514,24 @@ class Simulation:
                 # First sum
                 rhs1 = rhs1 + P_q_1_value*F_j
                 
+                
                 Pq_1.destroy()
                 F_j.destroy()
                 if j > 1:
                     # The second sum starts only at j = 2
-                    P_q_2        = P_Q_w(Q, n, i, 2)
-                    P_q_2_values = P_q_2.getColumnVector(n-i-1)
+                    P_q_2        = P_Q_w(Q, n, j, 2)
+                    P_q_2_values = P_q_2.getColumnVector(n-j-1)
 
                     Z_j = ope.dZj(freq, d_jZ[j])
                     
                     row_is = PETSc.IS().createStride(Vn.getSize()[0], first=0, step=1)
-                    col_is = PETSc.IS().createStride(n-i, first=0, step=1)
+                    col_is = PETSc.IS().createStride(n-j, first=0, step=1)
                     
                     Vn_i       = Vn.createSubMatrix(row_is, col_is)
                     Vn_i       = Z_j.matMult(Vn_i) # Vn_i = Z_i * Vn_i
                     Vn_i_P_q_2 = Vn_i.createVecLeft()
                     Vn_i.mult(P_q_2_values, Vn_i_P_q_2)
+                    
 
                     # Second sum
                     rhs3 = rhs3 + Vn_i_P_q_2
@@ -538,7 +548,6 @@ class Simulation:
     
             vn_1 = Vn.getColumnVector(n-2)
             Z_1.mult(vn_1, rhs2) # rhs2 = Z_1 * vn_1        
-            
             rhs = rhs1 - rhs2 - rhs3
             vn = Vn.createVecLeft()
             ksp.solve(rhs, vn)
@@ -548,6 +557,7 @@ class Simulation:
             rhs3.destroy()
             
             norm_vn = vn.norm()
+            #print(f' norm {n}th vector : {norm_vn}')
             
             for i in range(n):
                 if i == n-1:
@@ -556,7 +566,8 @@ class Simulation:
                     v_i = Vn.getColumnVector(i)     # Careful, asking for the vector i will give the (i+1)th reality vector
                     Q.setValue(i, n-1, vn.dot(v_i)) # Carefull the function vn.dot(v_i) does the scalar product between vn and the conjugate of v_i
                     v_i.destroy()
-    
+            Q.assemble()
+            #print(Q.view())
             ## Gram-schmidt
             for i in range(n):
                 v_i = Vn.getColumnVector(i)
@@ -608,12 +619,12 @@ class Simulation:
           
         ope     = self.operator
         loading = self.loading
-        Pav1    = np.zeros(freqvec.size, dtype=np.complex_)
+        
         mesh_   = self.mesh
 
         list_coeff_Z_j = ope.deriv_coeff_Z(0)
         list_coeff_F_j = loading.deriv_coeff_F(0)
-        
+        Pav1    = np.zeros(freqvec.size, dtype=np.complex128)
         P, Q         = mesh_.fonction_spaces()
         Psol1, Qsol1 = Function(P), Function(Q)
         offset       = P.dofmap.index_map.size_local * P.dofmap.index_map_bs
@@ -632,7 +643,7 @@ class Simulation:
             ksp.setOperators(Zn)
             ksp.setType("gmres")                       # Solver type 
             ksp.getPC().setType("lu")                  # Preconditionner type
-            ksp.getPC().setFactorSolverType("superlu") # Various type of previous objects are available, and different tests hae to be performed to find the best. Normaly this configuration provides best results
+            ksp.getPC().setFactorSolverType("mumps")   # Various type of previous objects are available, and different tests hae to be performed to find the best. Normaly this configuration provides best results
             
             alpha = Fn.copy()
             ksp.solve(Fn, alpha) # Inversion of the matrix
@@ -662,25 +673,13 @@ class Simulation:
         return Z_center
 
     def plot_radiation_factor(self, ax, freqvec, Pav, s = '', compute = True):
-        #_, ds, _ = self.mesh.integral_mesure()
-        #surfarea = petsc.assemble.assemble_scalar(form(1*ds(1)))
-        #k_output = 2*np.pi*freqvec/c0
-        #Z_center = 1j*k_output* Pav / surfarea
+        
         if compute :
             Z_center = self.compute_radiation_factor(freqvec, Pav)
         else:
             Z_center = Pav
-        if s == 'FOM_b1p':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b1p}$', c = 'green')
-        elif s == 'FOM_b2p':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b2p}$', c = 'm')
-        elif s == 'FOM_b3p':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{b3p}$', c = 'grey')
-        elif s == 'WCAWE':
-            ax.plot(freqvec, Z_center.real, label = r'$\sigma_{WCAWE}$', c = 'red')
-            
-        else :
-            ax.plot(freqvec, Z_center.real, label = s)
+    
+        ax.plot(freqvec, Z_center.real, label = s)
         ax.grid(True)
         ax.legend(loc='upper left')
         ax.set_xlabel('Frequency (Hz)')
@@ -704,7 +703,6 @@ class Operator(ABC):
         '''
 
         self.mesh        = mesh
-        self.deg         = None
         self.list_Z      = None
         self.list_coeffZ = None
 
@@ -743,7 +741,6 @@ class Operator(ABC):
     def get_listZ(self):
         pass
 
-
 class B1p(Operator):
 
     def __init__(self, mesh):
@@ -751,7 +748,6 @@ class B1p(Operator):
         Constructor of the b1p operator.
         '''
         super().__init__(mesh)
-        self.deg                       = self.mesh.deg
         self.list_Z, self.list_coeff_Z = self.b1p()
         
 
@@ -852,15 +848,14 @@ class B1p(Operator):
         Zsp = csr_matrix((av, aj, ai))
         savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
         
-
 class B2p(Operator):
 
     def __init__(self, mesh):
         '''
+
         Constructor of the b2p operator.
         '''
         super().__init__(mesh)
-        self.deg                       = self.deg
         self.list_Z, self.list_coeff_Z = self.b2p()
         
 
@@ -970,6 +965,244 @@ class B2p(Operator):
         Zsp = csr_matrix((av, aj, ai))
         savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
 
+class B2p_modified_dp_dq(Operator):
+
+    def __init__(self, mesh):
+        '''
+        Constructor of the b2p operator.
+        '''
+        super().__init__(mesh)
+        self.list_Z, self.list_coeff_Z = self.b2p()
+        
+
+    def b2p(self):
+        '''
+        Create all the constant Form of the b2p operator on the given mesh/simulation and all the coeff of the global matrix, all the constant Form of the force block vector and the related coeff
+    
+        input :
+            mesh_info    = List[]
+            submesh_info = List[]
+    
+        output :
+            list_Z       = np.array(Form) : List of the constant matrices of the b1p operator
+            list_coeff_Z = np.array() : array of the coeff as sympy expression w.r.t 'fr' symbol
+    
+        '''
+        mesh         = self.mesh.mesh
+        mesh_tags    = self.mesh.mesh_tags
+        mesh_bc_tags = self.mesh.mesh_bc_tags
+        xref         = self.mesh.xref
+
+        submesh           = self.mesh.submesh
+        entity_maps_mesh = self.mesh.entity_maps_mesh
+        n                = FacetNormal(mesh) # Normal to the boundaries
+        ns               = CellNormal(submesh) # Normal to the boundaries
+        
+        P, Q        = self.mesh.fonction_spaces()
+        dx, ds, dx1 = self.mesh.integral_mesure() 
+    
+        p, q = TrialFunction(P), TrialFunction(Q)
+        v, u = TestFunction(P), TestFunction(Q)
+        
+        fx1 = Function(Q)
+        fx1.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        
+        k = inner(grad(p), grad(v)) * dx
+        m = inner(p, v) * dx
+        c = inner(q, v)*ds(3)
+        
+        #dp  = inner(grad(p), n) # dp/dn = grad(p) * n
+        #ddp = inner(grad(dp), n) # d^2p/dn^2 = grad(dp/dn) * n = grad(grad(p) * n) * n
+        #g1  = inner(ddp, u)*ds(3)
+        g2  = inner(p, u)*ds(3)
+        g3  = inner(fx1*p, u)*ds(3)
+        g4  = inner(fx1**2*p, u)*ds(3)
+
+        dq  = inner(grad(q), ns) # dq/dn = grad(q) * n
+        e0  = inner(dq, u)*dx1
+        e1  = inner(fx1*q, u)*dx1
+        e2  = inner(q, u)*dx1
+    
+        list_Z       = np.array([k, m, c, g2, g3, g4, e0, e1, e2])
+        list_coeff_Z = np.array([1, -k0**2, -1, -k0**2, 4j*k0, 2, 1, 4, 2j*k0])
+    
+        return list_Z, list_coeff_Z
+
+    def get_listZ(self):
+        list_Z = self.b2p()[0]
+        return list_Z
+
+    def dZj(self, freq, list_coeff_Z_j):
+        '''
+        Create and assemble the jth derivate of global matrix of the b1p operator. 
+        input:
+            freq           = int : Frequency where the coeff will be evaluated
+            list_coeff_Z_j = List[lamdaFunction] : List of the jth derivate of the coeff as lambda function w.r.t frequency 
+        
+        output : 
+            Z = PETSc_MatType : Assembled jth derivated global matrix at the given frequency
+        '''
+        list_Z = self.list_Z
+
+        mesh             = self.mesh.mesh
+        entity_maps_mesh = self.mesh.entity_maps_mesh
+        submesh      = self.mesh.submesh
+
+        # The following lines save the bug when a coefficient is equal to zero
+        c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
+        c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
+        c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
+        c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        
+        a_00 = c_0*list_Z[0] + c_1*list_Z[1]
+        a_01 = c_2*list_Z[2]
+        a_10 = c_3*list_Z[3] + c_4*list_Z[4] + c_5*list_Z[5] 
+        a_11 = c_6*list_Z[6] + c_7*list_Z[7] + c_8*list_Z[8]
+    
+        z_00 = form(a_00)
+        z_01 = form(a_01, entity_maps=entity_maps_mesh)
+        z_10 = form(a_10, entity_maps=entity_maps_mesh)
+        z_11 = form(a_11, entity_maps=entity_maps_mesh)
+    
+        z = [[z_00, z_01],
+            [z_10, z_11]]
+    
+        Z = petsc.assemble_matrix_block(z)
+        Z.assemble()
+
+        return Z
+
+    def import_matrix(self, freq):
+        list_coeff_Z_j = self.deriv_coeff_Z(0)
+        Z = self.dZj(freq, list_coeff_Z_j[0])
+        ope_str = 'b2p'
+        ai, aj, av = Z.getValuesCSR()
+        Zsp = csr_matrix((av, aj, ai))
+        savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
+
+class B2p_modified_r(Operator):
+
+    def __init__(self, mesh):
+        '''
+        Constructor of the b2p operator.
+        '''
+        super().__init__(mesh)
+        self.list_Z, self.list_coeff_Z = self.b2p()
+        
+
+    def b2p(self):
+        '''
+        Create all the constant Form of the b2p operator on the given mesh/simulation and all the coeff of the global matrix, all the constant Form of the force block vector and the related coeff
+    
+        input :
+            mesh_info    = List[]
+            submesh_info = List[]
+    
+        output :
+            list_Z       = np.array(Form) : List of the constant matrices of the b1p operator
+            list_coeff_Z = np.array() : array of the coeff as sympy expression w.r.t 'fr' symbol
+    
+        '''
+        mesh         = self.mesh.mesh
+        mesh_tags    = self.mesh.mesh_tags
+        mesh_bc_tags = self.mesh.mesh_bc_tags
+        xref         = self.mesh.xref
+
+        entity_maps_mesh = self.mesh.entity_maps_mesh
+        n                = FacetNormal(mesh) # Normal to the boundaries
+        
+        #deg         = self.deg
+        P, Q        = self.mesh.fonction_spaces()
+        dx, ds, dx1 = self.mesh.integral_mesure() 
+    
+        p, q = TrialFunction(P), TrialFunction(Q)
+        v, u = TestFunction(P), TestFunction(Q)
+        
+        fx1 = Function(Q)
+        fx1.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        
+        k = inner(grad(p), grad(v)) * dx
+        m = inner(p, v) * dx
+        c = inner(q, v)*ds(3)
+        
+        dp  = inner(grad(p), n) # dp/dn = grad(p) * n
+        ddp = inner(grad(dp), n) # d^2p/dn^2 = grad(dp/dn) * n = grad(grad(p) * n) * n
+        g1  = inner((1/fx1**2)*ddp, u)*ds(3)
+        g2  = inner((1/fx1**2)*p, u)*ds(3)
+        g3  = inner((1/fx1)*p, u)*ds(3)
+        g4  = inner(p, u)*ds(3)
+        e1  = inner((1/fx1)*q, u)*dx1
+        e2  = inner((1/fx1**2)*q, u)*dx1
+    
+        list_Z       = np.array([k, m, c, g1, g2, g3, g4, e1, e2])
+        list_coeff_Z = np.array([1, -k0**2, -1, 1, -k0**2, 4j*k0, 2, 4, 2j*k0])
+    
+        return list_Z, list_coeff_Z
+
+    def get_listZ(self):
+        list_Z = self.b2p()[0]
+        return list_Z
+
+    def dZj(self, freq, list_coeff_Z_j):
+        '''
+        Create and assemble the jth derivate of global matrix of the b1p operator. 
+        input:
+            freq           = int : Frequency where the coeff will be evaluated
+            list_coeff_Z_j = List[lamdaFunction] : List of the jth derivate of the coeff as lambda function w.r.t frequency 
+        
+        output : 
+            Z = PETSc_MatType : Assembled jth derivated global matrix at the given frequency
+        '''
+        list_Z = self.list_Z
+
+        mesh             = self.mesh.mesh
+        entity_maps_mesh = self.mesh.entity_maps_mesh
+        submesh      = self.mesh.submesh
+
+        # The following lines save the bug when a coefficient is equal to zero
+        c_0 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
+        c_1 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
+        c_2 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
+        c_3 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6 = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        
+        a_00 = c_0*list_Z[0] + c_1*list_Z[1]
+        a_01 = c_2*list_Z[2]
+        a_10 = c_3*list_Z[3] + c_4*list_Z[4] + c_5*list_Z[5] + c_6*list_Z[6]
+        a_11 = c_7*list_Z[7] + c_8*list_Z[8]
+    
+        z_00 = form(a_00)
+        z_01 = form(a_01, entity_maps=entity_maps_mesh)
+        z_10 = form(a_10, entity_maps=entity_maps_mesh)
+        z_11 = form(a_11)
+    
+        z = [[z_00, z_01],
+            [z_10, z_11]]
+    
+        Z = petsc.assemble_matrix_block(z)
+        Z.assemble()
+
+        return Z
+
+    def import_matrix(self, freq):
+        list_coeff_Z_j = self.deriv_coeff_Z(0)
+        Z = self.dZj(freq, list_coeff_Z_j[0])
+        ope_str = 'b2p'
+        ai, aj, av = Z.getValuesCSR()
+        Zsp = csr_matrix((av, aj, ai))
+        savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
+
+
+
 class B3p(Operator):
 
     def __init__(self, mesh):
@@ -977,7 +1210,6 @@ class B3p(Operator):
         Constructor of the b2p operator.
         '''
         super().__init__(mesh)
-        self.deg                       = self.deg
         self.list_Z, self.list_coeff_Z = self.b3p()
         
 
@@ -1063,13 +1295,13 @@ class B3p(Operator):
         c_0  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
         c_1  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
         c_2  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
-        c_3  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
-        c_4  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
-        c_5  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
-        c_6  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
-        c_7  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
-        c_8  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
-        c_9  = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
+        c_3  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        c_9  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
         c_10 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[10](freq)))
         c_11 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[11](freq)))
         c_12 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[12](freq)))
@@ -1099,6 +1331,148 @@ class B3p(Operator):
         ai, aj, av = Z.getValuesCSR()
         Zsp = csr_matrix((av, aj, ai))
         savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
+
+class B3p_modified_r(Operator):
+
+    def __init__(self, mesh):
+        '''
+        Constructor of the b2p operator.
+        '''
+        super().__init__(mesh)
+        self.list_Z, self.list_coeff_Z = self.b3p()
+        
+
+    def b3p(self):
+        '''
+        Create all the constant Form of the b2p operator on the given mesh/simulation and all the coeff of the global matrix, all the constant Form of the force block vector and the related coeff
+    
+        input :
+            mesh_info    = List[]
+            submesh_info = List[]
+    
+        output :
+            list_Z       = np.array(Form) : List of the constant matrices of the b1p operator
+            list_coeff_Z = np.array() : array of the coeff as sympy expression w.r.t 'fr' symbol
+    
+        '''
+        mesh         = self.mesh.mesh
+        mesh_tags    = self.mesh.mesh_tags
+        mesh_bc_tags = self.mesh.mesh_bc_tags
+        xref         = self.mesh.xref
+
+        entity_maps_mesh = self.mesh.entity_maps_mesh
+        n                = FacetNormal(mesh) # Normal to the boundaries
+        
+        #deg         = self.deg
+        P, Q        = self.mesh.fonction_spaces()
+        dx, ds, dx1 = self.mesh.integral_mesure() 
+    
+        p, q = TrialFunction(P), TrialFunction(Q)
+        v, u = TestFunction(P), TestFunction(Q)
+        
+        fx1 = Function(Q)
+        fx1.interpolate(lambda x: 1/np.sqrt((x[0]-xref[0])**2 + (x[1]-xref[1])**2 + (x[2]-xref[2])**2))
+        
+        k = inner(grad(p), grad(v)) * dx
+        m = inner(p, v) * dx
+        c = inner(q, v)*ds(3)
+        
+        dp   = inner(grad(p), n) # dp/dn = grad(p) * n
+        ddp  = inner(grad(dp), n) # d^2p/dn^2 = grad(dp/dn) * n = grad(grad(p) * n) * n
+        dddp = inner(grad(ddp), n) # d^3p/dn^3 = grad(d^2p/dn^2) * n = grad(grad(dp/dn) * n) * n = grad(grad(grad(p) * n) * n) * n
+        
+        #g1   = inner((1/fx1**3)*dddp, u)*ds(3)
+        g1   = inner((1/fx1**6)*dddp, u)*ds(3)
+
+        #g2   = inner((1/fx1**2)*ddp, u)*ds(3)
+        #g3   = inner((1/fx1**3)*ddp, u)*ds(3)
+        g2   = inner((1/fx1**5)*ddp, u)*ds(3)
+        g3   = inner((1/fx1**6)*ddp, u)*ds(3)
+        
+        #g4   = inner(p, u)*ds(3)
+        #g5   = inner((1/fx1)*p, u)*ds(3)
+        #g6   = inner((1/fx1**2)*p, u)*ds(3)
+        #g7   = inner((1/fx1**3)*p, u)*ds(3)
+        g4   = inner((1/fx1**3)*p, u)*ds(3)
+        g5   = inner((1/fx1**4)*p, u)*ds(3)
+        g6   = inner((1/fx1**5)*p, u)*ds(3)
+        g7   = inner((1/fx1**6)*p, u)*ds(3)
+        
+        #e1   = inner((1/fx1)*q, u)*dx1
+        #e2   = inner((1/fx1**2)*q, u)*dx1
+        #e3   = inner((1/fx1**3)*q, u)*dx1
+        e1   = inner((1/fx1**4)*q, u)*dx1
+        e2   = inner((1/fx1**5)*q, u)*dx1
+        e3   = inner((1/fx1**6)*q, u)*dx1
+    
+        list_Z       = np.array([k,      m,  c, g1, g2,    g3, g4,     g5,       g6,        g7, e1,     e2,       e3])
+        list_coeff_Z = np.array([1, -k0**2, -1,  1,  9, 3j*k0,  6, 18j*k0, -9*k0**2, -1j*k0**3, 18, 18j*k0, -3*k0**2])
+        #list_coeff_Z = np.array([1, -k0**2, -1,  1*(1/(-1j*k0**3)),  9*(1/(-1j*k0**3)), 3j*k0*(1/(-1j*k0**3)),  6*(1/(-1j*k0**3)), 18j*k0*(1/(-1j*k0**3)), -9*k0**2*(1/(-1j*k0**3)), -1j*k0**3*(1/(-1j*k0**3)), 18*(1/(-1j*k0**3)), 18j*k0*(1/(-1j*k0**3)), -3*k0**2*(1/(-1j*k0**3))])
+
+        return list_Z, list_coeff_Z
+
+    def get_listZ(self):
+        list_Z = self.b3p()[0]
+        return list_Z
+
+    def dZj(self, freq, list_coeff_Z_j):
+        '''
+        Create and assemble the jth derivate of global matrix of the b3p operator. 
+        input:
+            freq           = int : Frequency where the coeff will be evaluated
+            list_coeff_Z_j = List[lamdaFunction] : List of the jth derivate of the coeff as lambda function w.r.t frequency 
+        
+        output : 
+            Z = PETSc_MatType : Assembled jth derivated global matrix at the given frequency
+        '''
+        list_Z = self.list_Z
+
+        mesh             = self.mesh.mesh
+        submesh          = self.mesh.submesh
+        entity_maps_mesh = self.mesh.entity_maps_mesh
+
+        # The following lines solve the bug when a coefficient is equal to zero
+        c_0  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[0](freq)))
+        c_1  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[1](freq)))
+        c_2  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[2](freq)))
+        c_3  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[3](freq)))
+        c_4  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[4](freq)))
+        c_5  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[5](freq)))
+        c_6  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[6](freq)))
+        c_7  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[7](freq)))
+        c_8  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[8](freq)))
+        c_9  = Constant(mesh, PETSc.ScalarType(list_coeff_Z_j[9](freq)))
+        c_10 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[10](freq)))
+        c_11 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[11](freq)))
+        c_12 = Constant(submesh, PETSc.ScalarType(list_coeff_Z_j[12](freq)))
+        
+        a_00 = c_0*list_Z[0] + c_1*list_Z[1]
+        a_01 = c_2*list_Z[2]
+        a_10 = c_3*list_Z[3] + c_4*list_Z[4] + c_5*list_Z[5] + c_6*list_Z[6] + c_7*list_Z[7] + c_8*list_Z[8] + c_9*list_Z[9]
+        a_11 = c_10*list_Z[10] + c_11*list_Z[11] + c_12*list_Z[12]
+        
+        z_00 = form(a_00)
+        z_01 = form(a_01, entity_maps=entity_maps_mesh)
+        z_10 = form(a_10, entity_maps=entity_maps_mesh)
+        z_11 = form(a_11)
+    
+        z = [[z_00, z_01],
+            [z_10, z_11]]
+    
+        Z = petsc.assemble_matrix_block(z)
+        Z.assemble()
+
+        return Z  
+
+    def import_matrix(self, freq):
+        list_coeff_Z_j = self.deriv_coeff_Z(0)
+        Z = self.dZj(freq, list_coeff_Z_j[0])
+        ope_str = 'b3p'
+        ai, aj, av = Z.getValuesCSR()
+        Zsp = csr_matrix((av, aj, ai))
+        savemat('Z_'+ope_str+'_ref.mat', {'Z'+ope_str:Zsp})
+
+
 
 class Loading:
     '''
@@ -1192,6 +1566,8 @@ class Loading:
         d_jF = [[lambdify(fr, d_jFexpr_j, 'numpy') for d_jFexpr_j in d_jFexpr[i]] for i in range(len(d_jFexpr))]
         return d_jF
 
+
+
 def sub_matrix(Q, start, end):
     '''
     This function is to obtain the sub matrix need for the correction term (P_q_w)
@@ -1245,7 +1621,6 @@ def P_Q_w(Q, alpha, beta, omega):
         P_q_w.setValues(i, [j for j in range(P_q.shape[1])], P_q[i], PETSc.InsertMode.INSERT_VALUES)   
     P_q_w.assemble()
     return P_q_w
-
 
 def Zn_Fn_matrices(Z, F, Vn):
     '''
@@ -1332,6 +1707,8 @@ def get_cond_nb(Z):
     # Creating the SVD solver
     svd = SLEPc.SVD().create()
     svd.setOperator(Z)
+
+    svd.setDimensions(nsv=10)
     svd.setFromOptions()
 
     # Solving the singular value decomposition
@@ -1355,6 +1732,46 @@ def get_cond_nb(Z):
     condition_number = sigma_max / sigma_min
     #print(f'Conditioning number :{condition_number}')
     return condition_number, list_sigma
+
+def get_cond_nbV2(Z):
+    t1 = time()
+    Z_fct1 = Z.copy()
+    Z_fct1.convert("seqdense")
+    Z_fct = Z_fct1.getDenseArray()
+    #print(Z_fct)
+
+    S = la.eigvals(Z_fct)
+    t2 = time()
+    print(f"scipy done in {t2-t1}")
+    #condition_number = max(S) / min(S)
+    #S = la.eigvals(Z_fct)
+
+    # Créer un objet EPS pour résoudre le problème aux valeurs propres
+    eps = SLEPc.EPS().create()
+    # Assigner la matrice A au solveur
+    eps.setOperators(Z)
+    # Définir les options (par exemple, calculer 10 valeurs propres)
+    eps.setDimensions(nev=len(S))  # nev : nombre de valeurs propres à calculer
+    # Définir le type de problème aux valeurs propres (standard)
+    #eps.setProblemType(SLEPc.EPS.ProblemType.HEP)  # HEP : Hermitian Eigenvalue Problem
+    # Choisir le solveur (par exemple, Krylov-Schur, par défaut)
+    eps.setFromOptions()
+    # Résoudre le problème
+    eps.solve()
+    
+    # Obtenir le nombre de valeurs propres convergées
+    nconv = eps.getConverged()
+    
+    # Initialiser une liste pour stocker les valeurs propres
+    eigenvalues = []
+    
+    # Récupérer les valeurs propres convergées
+    for i in range(nconv):
+        eigenvalue = eps.getEigenvalue(i)
+        eigenvalues.append(eigenvalue)
+    t3 = time()
+    print(f"SLEPc done in {t3 -t2}")
+    return S, np.array(eigenvalues)
     
 def row_norms(A):
     
@@ -1503,7 +1920,7 @@ def parse_wcawe_param():
     return frequencies, n_values
 
 def store_results(s, freqvec, Pav):
-    with open('/root/WCAWE_POO_github/FOM_data/'+s+'.txt', 'w') as fichier:    
+    with open('FOM_data/'+s+'.txt', 'w') as fichier:    
         for i in range(len(freqvec)):        
             fichier.write('{}\t{}\n'.format(freqvec[i], Pav[i]))
 
@@ -1524,11 +1941,18 @@ def store_resultsv2(list_s, freqvec, Pav, simu):
             s+= "_"
     s+=".txt"
     print(s)
-    with open("/root/WCAWE_POO_github/classical/"+s, 'w') as fichier:    
+    with open("classical/"+s, 'w') as fichier:    
         for i in range(len(freqvec)):        
             fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
 
-def store_results_wcawe(list_s, freqvec, Pav, simu):
+def store_resultsv3(s, freqvec, Pav, simu):
+    z_center = simu.compute_radiation_factor(freqvec, Pav)
+    with open('FOM_data/'+s+'.txt', 'w') as fichier:    
+        for i in range(len(freqvec)):   
+
+            fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
+
+def store_results_wcawe(list_s, freqvec, Pav, simu, file_wcawe_para_list):
     z_center = simu.compute_radiation_factor(freqvec, Pav)
     dict_s = {
         "geo"  : list_s[0],
@@ -1544,11 +1968,16 @@ def store_results_wcawe(list_s, freqvec, Pav, simu):
         if key != "dimQ":
             s_dir+= "_"
     print(s_dir)
-    directory_path = "/root/WCAWE_POO_github/wcawe/classical/" + s_dir
+    if "modified_r" in list_s[2]:
+        directory_path = "wcawe/classical/modified_r/" + s_dir
+    else:
+        directory_path = "wcawe/classical/" + s_dir
     # Create the directory if it doesn't exist
     os.makedirs(directory_path, exist_ok=True)
-
-    list_freq, list_N = parse_wcawe_param()
+    if file_wcawe_para_list[0]:
+        list_freq, list_N = parse_wcawe_param()
+    else:
+        list_freq, list_N = file_wcawe_para_list[1], file_wcawe_para_list[2]
     s = ""
     for freq in list_freq:
         s+=str(freq)
@@ -1566,7 +1995,7 @@ def store_results_wcawe(list_s, freqvec, Pav, simu):
             fichier.write('{}\t{}\n'.format(freqvec[i], z_center[i]))
 
 def import_frequency_sweep(s):
-    with open('/root/WCAWE_POO_github/FOM_data/'+s+".txt", "r") as f:
+    with open('FOM_data/'+s+".txt", "r") as f:
         freqvec = list()
         Pav     = list()
         for line in f:
@@ -1584,7 +2013,7 @@ def import_frequency_sweep(s):
     return freqvec, Pav
 
 def import_frequency_sweepv2(s):
-    with open('/root/WCAWE_POO_github/classical/'+s+".txt", "r") as f:
+    with open('classical/'+s+".txt", "r") as f:
         freqvec = list()
         Pav     = list()
         for line in f:
@@ -1651,3 +2080,52 @@ def least_square_err(freqvec1, Z_center1, freqvec2, Z_center2):
     else :
         print("something went wrong")
         return None
+    
+def harry_plotter(space, sol, str_value, show_edges = True):
+
+    u_topology, u_cell_types, u_geometry = plot.vtk_mesh(space)
+    u_grid = pyvista.UnstructuredGrid(u_topology, u_cell_types, u_geometry)
+    u_grid.point_data[str_value] = sol.x.array.real
+    u_grid.set_active_scalars(str_value)
+    u_plotter = pyvista.Plotter()
+    u_plotter.add_mesh(u_grid, show_edges=show_edges)
+    u_plotter.view_xy()
+    if not pyvista.OFF_SCREEN:
+        u_plotter.show()
+
+def harry_plotterv2(spaces, sols, str_values, show_edges = True):
+
+    nb_graphs = len(spaces)
+
+    if nb_graphs % 3 == 0 :
+        rows = nb_graphs // 3
+    else :
+        rows = nb_graphs // 3 + 1 
+    
+    if nb_graphs <= 3 :
+        cols = nb_graphs
+    else : 
+        cols = 3
+    
+    ii = 0
+    plotter = pyvista.Plotter(shape=(rows, cols))
+
+    for i in range(rows):
+        for j in range(cols):
+            space     = spaces[ii]
+            sol       = sols[ii]
+            str_value = str_values[ii]
+            
+            plotter.subplot(i, j)
+            u_topology, u_cell_types, u_geometry = plot.vtk_mesh(space)
+            u_grid = pyvista.UnstructuredGrid(u_topology, u_cell_types, u_geometry)
+            u_grid.point_data[str_value] = sol.x.array.real
+            u_grid.set_active_scalars(str_value)
+            plotter.add_mesh(u_grid, show_edges=show_edges)
+            plotter.view_xy()
+            ii += 1
+    
+    if not pyvista.OFF_SCREEN:
+        plotter.show()
+
+

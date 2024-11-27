@@ -4,9 +4,6 @@ from dolfinx.io import gmshio
 import dolfinx.mesh as msh
 import numpy as np
 
-
-
-
 def cubic_domain(side_box = 0.11, radius = 0.1, lc = 8e-3, model_name = "Cubic"):
 
     gmsh.initialize()

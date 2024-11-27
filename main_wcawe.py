@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from operators_POO import (Mesh, Loading, Simulation,
                         B1p, B2p, B3p,
+                        B2p_modified_r, B3p_modified_r,
                         SVD_ortho,
                         store_results, store_results_wcawe, import_frequency_sweepv2, import_frequency_sweep,
                         least_square_err, compute_analytical_radiation_factor,
@@ -24,17 +25,20 @@ if file_wcawe_para:
 else:
     geometry1 = 'cubic'
     geometry2 = 'small'
-    lc        = 8e-3
+    
 
 geometry  = geometry1 + '_'+ geometry2
 
 if   geometry2 == 'small':
     side_box = 0.11
+    lc       = 8e-3
 elif geometry2 == 'large':
     side_box = 0.40
+    lc       = 2e-2
 else :
     print("Enter your own side_box and mesh size in the code")
     side_box = 0.11
+    lc       = 8e-3
 
 freqvec = np.arange(80, 2001, 20)
 radius   = 0.1
@@ -199,7 +203,8 @@ if False:
         plt.savefig("WCAWE_b3p.png")
 
 def fct_main_wcawe(
-    deg,
+    degP,
+    degQ,
     str_ope,
     freqvec,
     list_N,
@@ -208,19 +213,21 @@ def fct_main_wcawe(
     save_fig,
     save_data,
 ):
-    dimP = deg
-    if False :
-        dimQ = deg -1
-    else :
-        dimQ = deg
-    mesh_    = Mesh(dimP, side_box, radius, lc, geo_fct)
+    file_wcawe_para_list = [file_wcawe_para, list_freq, list_N]
+
+    
+    mesh_    = Mesh(dimP, dimQ, side_box, radius, lc, geo_fct)
 
     if str_ope == "b1p":
         ope = B1p(mesh_)
     elif str_ope == "b2p":
         ope = B2p(mesh_)
+    elif str_ope == "b2p_modified_r":
+        ope = B2p_modified_r(mesh_)
     elif str_ope == "b3p":
         ope = B3p(mesh_)
+    elif str_ope == "b3p_modified_r":
+        ope = B3p_modified_r(mesh_)
     else:
         print("Operator doesn't exist")
         return
@@ -228,24 +235,24 @@ def fct_main_wcawe(
     loading = Loading(mesh_)
     simu    = Simulation(mesh_, ope, loading)
 
-    s = 'classical_'+ geometry + '_' + str_ope + '_' + str(lc) + '_' + str(dimP) + '_' + str(dimQ)
-    freqvec_fct, PavFOM_fct = import_frequency_sweepv2(s)
-    
+    #s = 'classical_'+ geometry + '_' + str_ope + '_' + str(lc) + '_' + str(dimP) + '_' + str(dimQ)
+    #freqvec_fct, PavFOM_fct = import_frequency_sweepv2(s)
+    freqvec_fct = np.arange(80, 2001, 20) 
 
     t1   = time()
     Vn   = simu.merged_WCAWE(list_N, list_freq)
     t2   = time()
     print(f'WCAWE CPU time  : {t2 -t1}')
 
-    Vn = SVD_ortho(Vn)
+    #Vn = SVD_ortho(Vn)
     t3 = time()
     print(f'SVD CPU time  : {t3 -t2}')
     PavWCAWE_fct = simu.moment_matching_MOR(Vn, freqvec_fct)
     t4 = time()
     print(f'Whole CPU time  : {t4 -t1}')
 
-    err_wcawe = least_square_err(freqvec_fct, PavFOM_fct.real, freqvec_fct, simu.compute_radiation_factor(freqvec_fct, PavWCAWE_fct).real)
-    print(f'For list_N = {list_N} - L2_err(wcawe) = {err_wcawe}')
+    #err_wcawe = least_square_err(freqvec_fct, PavFOM_fct.real, freqvec_fct, simu.compute_radiation_factor(freqvec_fct, PavWCAWE_fct).real)
+    #print(f'For list_N = {list_N} - L2_err(wcawe) = {err_wcawe}')
 
     if save_fig:
         fig, ax = plt.subplots()
@@ -257,25 +264,91 @@ def fct_main_wcawe(
     
     if save_data :
         list_s = [geometry1, geometry2, str_ope, str(lc), str(dimP), str(dimQ)]
-        store_results_wcawe(list_s, freqvec, PavWCAWE_fct, simu)
+        store_results_wcawe(list_s, freqvec, PavWCAWE_fct, simu, file_wcawe_para_list)
 
 if file_wcawe_para:
     str_ope = ope
     list_freq, list_N = parse_wcawe_param()
 else:
-    str_ope = "b1p"
-    dimP = 1
+    str_ope = "b2p"
+    dimP = 2
     list_N = [10]
     list_freq = [1000]
 
+if True:
+    fct_main_wcawe(
+        degP       = dimP,
+        degQ       = dimP,
+        str_ope   = str_ope,
+        freqvec   = freqvec,
+        list_N    = list_N,
+        list_freq = list_freq,
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
 
-fct_main_wcawe(
-    deg       = dimP,
-    str_ope   = str_ope,
-    freqvec   = freqvec,
-    list_N    = list_N,
-    list_freq = list_freq,
-    file_name = "WCAWE_test",
-    save_fig  = True,
-    save_data = True
-)
+
+if False:
+    fct_main_wcawe(
+        deg       = 1,
+        str_ope   = "b1p",
+        freqvec   = freqvec,
+        list_N    = [5],
+        list_freq = [1000],
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
+    fct_main_wcawe(
+        deg       = 3,
+        str_ope   = "b2p",
+        freqvec   = freqvec,
+        list_N    = [5],
+        list_freq = [1000],
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
+    fct_main_wcawe(
+        deg       = 3,
+        str_ope   = "b2p_modified_r",
+        freqvec   = freqvec,
+        list_N    = [5],
+        list_freq = [1000],
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
+
+    fct_main_wcawe(
+        deg       = 1,
+        str_ope   = "b1p",
+        freqvec   = freqvec,
+        list_N    = [20],
+        list_freq = [1000],
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
+    fct_main_wcawe(
+        deg       = 3,
+        str_ope   = "b2p",
+        freqvec   = freqvec,
+        list_N    = [20],
+        list_freq = [1000],
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
+    fct_main_wcawe(
+        deg       = 3,
+        str_ope   = "b2p_modified_r",
+        freqvec   = freqvec,
+        list_N    = [20],
+        list_freq = [1000],
+        file_name = "WCAWE_test",
+        save_fig  = False,
+        save_data = True
+    )
+
