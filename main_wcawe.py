@@ -17,7 +17,7 @@ from operators_POO import (Mesh, Loading, Simulation,
                         least_square_err, compute_analytical_radiation_factor,
                         get_wcawe_param, parse_wcawe_param)
 
-file_wcawe_para = True
+file_wcawe_para = False
 if file_wcawe_para:
     dir, geo, case, ope, lc, dimP, dimQ = get_wcawe_param()
     geometry1 = geo
@@ -235,8 +235,8 @@ def fct_main_wcawe(
     loading = Loading(mesh_)
     simu    = Simulation(mesh_, ope, loading)
 
-    #s = 'classical_'+ geometry + '_' + str_ope + '_' + str(lc) + '_' + str(dimP) + '_' + str(dimQ)
-    #freqvec_fct, PavFOM_fct = import_frequency_sweepv2(s)
+    s = 'classical_'+ geometry + '_' + str_ope + '_' + str(lc) + '_' + str(dimP) + '_' + str(dimQ)
+    freqvec_fct, PavFOM_fct = import_frequency_sweepv2(s)
     freqvec_fct = np.arange(80, 2001, 20) 
 
     t1   = time()
@@ -253,6 +253,12 @@ def fct_main_wcawe(
 
     #err_wcawe = least_square_err(freqvec_fct, PavFOM_fct.real, freqvec_fct, simu.compute_radiation_factor(freqvec_fct, PavWCAWE_fct).real)
     #print(f'For list_N = {list_N} - L2_err(wcawe) = {err_wcawe}')
+    fig, ax = plt.subplots()
+    simu.plot_radiation_factor(ax, freqvec_fct, PavFOM_fct, s = 'FOM_' + str_ope, compute = False)
+    simu.plot_radiation_factor(ax, freqvec_fct, PavWCAWE_fct, s = 'WCAWE')
+    ax.set_ylim(0, 1.5)
+    plt.title(f'list_N = {list_N}')
+    plt.show()
 
     if save_fig:
         fig, ax = plt.subplots()
@@ -270,9 +276,10 @@ if file_wcawe_para:
     str_ope = ope
     list_freq, list_N = parse_wcawe_param()
 else:
-    str_ope = "b2p"
-    dimP = 2
-    list_N = [10]
+    str_ope = "b3p"
+    dimP = 3
+    dimQ = dimP
+    list_N = [5]
     list_freq = [1000]
 
 if True:
@@ -285,7 +292,7 @@ if True:
         list_freq = list_freq,
         file_name = "WCAWE_test",
         save_fig  = False,
-        save_data = True
+        save_data = False
     )
 
 

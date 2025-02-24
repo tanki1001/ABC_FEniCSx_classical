@@ -19,7 +19,7 @@ def import_result(s):
             results = [complex(element) for element in results]
     return frequency, results
 
-geometry1 = "cubic"
+geometry1 = "broken_cubic"
 geometry2 = "small"
 geometry = geometry1 + '_' + geometry2
 
@@ -27,18 +27,18 @@ s_ABC_comsol = 'COMSOL_data/' + geometry + '_COMSOL_results'
 frequency, results_ABC_comsol = import_result(s_ABC_comsol)
 
 s_PML_comsol = 'COMSOL_data/PML/PML_' + geometry
-_, results_PML_comsol = import_result(s_PML_comsol)
+#_, results_PML_comsol = import_result(s_PML_comsol)
 
 s_comsol_eq_sect = 'COMSOL_Eq/Eq_section/' + geometry
-_, results_PML_comsol_eq_sect = import_result(s_comsol_eq_sect)
+#_, results_PML_comsol_eq_sect = import_result(s_comsol_eq_sect)
 
 s_comsol_eq_view = 'COMSOL_Eq/Eq_view/' + geometry
-_, results_PML_comsol_eq_view = import_result(s_comsol_eq_view)
+#_, results_PML_comsol_eq_view = import_result(s_comsol_eq_view)
 
-ope  = 'b3p'
-dimP = 4
+ope  = 'b2p'
+dimP = 3
 s_noQ = 'no_Q_results/' + ope +'_' + geometry + '_' + str(dimP)
-_, results_noQ = import_result(s_noQ)
+#_, results_noQ = import_result(s_noQ)
 
 if geometry2 == 'small':
     lc = 8e-3
@@ -51,12 +51,12 @@ fig, ax = plt.subplots(figsize=(16,9))
 freqvec = np.arange(80, 2001, 20)     
 plot_analytical_result_sigma(ax, freqvec, 0.1)
 
-ax.plot(frequency, results_ABC_comsol, label = 'ABC_COMSOL')
+ax.plot(frequency, results_ABC_comsol, label = geometry + '_COMSOL')
 #ax.plot(frequency, results_PML_comsol, label = 'PML_COMSOL')
 #ax.plot(frequency, results_noQ, label = 'noQ')
-ax.plot(frequency, results_PML_comsol_eq_sect, label = 'COMSOL_eq_sect')
-ax.plot(frequency, results_PML_comsol_eq_view, label = 'COMSOL_eq_view')
-#ax.plot(frequency, results_classical, label = 'FEniCSx')
+#ax.plot(frequency, results_PML_comsol_eq_sect, label = 'COMSOL_eq_sect')
+#ax.plot(frequency, results_PML_comsol_eq_view, label = 'COMSOL_eq_view')
+ax.plot(frequency, results_classical, label = geometry + '_' + ope + '_' + str(lc) + '_' + str(dimP) + '_' + str(dimP))
 ax.grid(True)
 ax.set_title(geometry)
 ax.legend(loc='upper left')

@@ -1,7 +1,7 @@
 # Modules importations
 import numpy as np
 from scipy import special
-from geometries import cubic_domain, spherical_domain, half_cubic_domain, broken_cubic_domain
+from geometries import cubic_domain, spherical_domain, half_cubic_domain, broken_cubic_domain, ellipsoidal_domain, curvedcubic_domain
 from postprocess import relative_errZ,import_FOM_result
 from dolfinx.fem import (form, Function, FunctionSpace, petsc)
 import petsc4py
@@ -11,7 +11,10 @@ from time import time
 from operators_POO import (Mesh,
                         B1p, B2p, B3p, 
                         B2p_modified_r, B3p_modified_r,
+                        B2p_modified_r6,
                         B2p_modified_dp_dq,
+                        B2p_modified_mixB1p,
+                        B2p_modified_IBP,
                         Loading, 
                         Simulation, 
                         import_frequency_sweep, import_COMSOL_result, store_results, store_resultsv2, store_resultsv3, plot_analytical_result_sigma,
@@ -41,6 +44,10 @@ elif geometry1 == 'half_cubic':
     geo_fct = half_cubic_domain
 elif geometry1 == 'broken_cubic':
     geo_fct = broken_cubic_domain
+elif geometry1 == 'ellipsoidal':
+    geo_fct = ellipsoidal_domain
+elif geometry1 == 'curvedcubic':
+    geo_fct = curvedcubic_domain
 else :
     print("WARNING : May you choose an implemented geometry")
 
@@ -177,7 +184,7 @@ def main_ABCmodified_curves_fct(dimP,
                                 plot_pressure_field = False):
     
     mesh_    = Mesh(dimP, dimQ, side_box, radius, lc, geo_fct)
-    loading = Loading(mesh_)
+    loading  = Loading(mesh_)
 
     if str_ope == "b1p":
         ope = B1p(mesh_)
@@ -185,8 +192,14 @@ def main_ABCmodified_curves_fct(dimP,
         ope = B2p(mesh_)
     elif str_ope == "b2p_modified_r":
         ope = B2p_modified_r(mesh_)
+    elif str_ope == "b2p_modified_r6":
+        ope = B2p_modified_r6(mesh_)
     elif str_ope == "b2p_modified_dp_dq":
         ope = B2p_modified_dp_dq(mesh_)
+    elif str_ope == "b2p_modified_mixb1p":
+        ope = B2p_modified_mixB1p(mesh_)
+    elif str_ope == "b2p_modified_IBP":
+        ope = B2p_modified_IBP(mesh_)
     elif str_ope == "b3p":
         ope = B3p(mesh_)
     elif str_ope == "b3p_modified_r":
@@ -228,309 +241,24 @@ def main_ABCmodified_curves_fct(dimP,
         simu.plot_sv_listZ(s = s2)
 
     if plot_pressure_field :
-        simu.singular_frequency_FOM(250)
+        simu.singular_frequency_FOM(750)
 
 
 
 ##############################################
-# The following is the plot of the b2p and b2p_modified_r comparison
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    dimP = 2
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 2
-    str_ope = "b2p_modified_r"
-    from_data = True 
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/ABC_curves/classical_"+geometry+"_b2p_b2pmodified.png")
-
-##############################################
-# The following is the plot of b1p b2p and b3p comparison with analytical and COMSOL results
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    s = geometry
-    frequency, results = import_COMSOL_result(s)
-
-    ax.plot(frequency, results, c = 'black', label=r'$\sigma_{COMSOL}$')
-
-    dimP = 1
-    str_ope = "b1p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 2
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 3
-    str_ope = "b3p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/ABC_curves/classical_"+geometry+"_b1p_b2p_b3p_ana_comsol.png")
-
-##############################################
-# The following is the plot of the sv listZ for b2p operator 
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    dimP = 2
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax, plot_svlistZ = True)
-
-##############################################
-# The following is the downloading b2p_modified_r results
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-    dimP = 3
-    str_ope = "b2p_modified_r"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-##############################################
-# The following is the downloading b3p_modified_r results
-
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-    plot_analytical_result_sigma(ax, freqvec, radius)
-    dimP = 3
-    str_ope = "b3p_modified_r"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/test.png")
-
-##############################################
-# The following is the downloading images for b3p_modified_r conditionning ppt
-if False:
-
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    dimP = 2
-    str_ope = "b2p_modified_r"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/test.png")
-
-##############################################
-# The following is the downloading b3p_modified_r large cubic 4_4
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    dimP = 4
-    str_ope = "b3p_modified_r"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-##############################################
-# The following is the downloading b2p_modified_r large cubic 3_3
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    dimP = 3
-    str_ope = "b2p_modified_r"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, str_ope, from_data, freqvec, geo_fct, ax)
-
-
-##############################################
-# The following is the test on b2p large spherical case with dim P = 2 and dim Q = 3 | WARNING : I have changed the way dimQ is difined in main_ABCmodified_curves_fct() function plus in operators_POO.py file
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    dimP = 2
-    dimQ = 3
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 2
-    dimQ = 4
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 2
-    dimQ = 1
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 3
-    dimQ = 1
-    str_ope = "b2p"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/test.png")
-
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    dimP = 2
-    dimQ = 2
-    str_ope = "b1p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    lc       = 0.98e-2
-
-    dimP = 1
-    dimQ = 1
-    str_ope = "b1p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/test.png")
-
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    dimP = 2
-    dimQ = 2
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 3
-    dimQ = 3
-    str_ope = "b2p"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    lc       = 1.31e-2
-
-    dimP = 2
-    dimQ = 2
-    str_ope = "b2p"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/test.png")
-
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    dimP = 2
-    dimQ = 2
-    str_ope = "b1p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 3
-    dimQ = 3
-    str_ope = "b2p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 4
-    dimQ = 2
-    str_ope = "b3p"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/test.png")
-
-if False:
-    fig, ax = plt.subplots(figsize=(16,9))
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    dimP = 3
-    dimQ = 3
-    str_ope = "b3p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    dimP = 3
-    dimQ = 3
-    str_ope = "b3p_modified_r"
-    from_data = False
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax)
-
-    plot_analytical_result_sigma(ax, freqvec, radius)
-
-    ax.legend()
-    ax.set_ylim(0,2)
-    plt.savefig("/root/WCAWE_POO_github/curves/r6test.png")
 
 if True:
     fig, ax = plt.subplots(figsize=(16,9))
 
     plot_analytical_result_sigma(ax, freqvec, radius)
 
-    dimP = 4
-    dimQ = 4
-    str_ope = "b3p"
-    from_data = True
-    freqvec = np.arange(80, 2001, 20)  
-    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax, plot_pressure_field=False)
-
+    dimP = 2
+    dimQ = 2
+    str_ope = "b2p_modified_mixb1p"
+    from_data = False
+    freqvec = np.arange(80, 2001, 20) 
+    save_data = False 
+    main_ABCmodified_curves_fct(dimP, dimQ, str_ope, from_data, freqvec, geo_fct, ax, save_data = save_data, plot_pressure_field=False)
     ax.legend()
     ax.set_ylim(0,2)
     #plt.savefig("./root/WCAWE_POO_github/curves/test.png")
