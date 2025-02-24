@@ -38,7 +38,7 @@ source = 1
 fr = symbols('fr')
 k0 = 2*np.pi*fr/c0
 
-
+print("test22222")
 class Mesh:
     
 
